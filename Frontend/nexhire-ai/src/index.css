@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+html{
+  scroll-behavior:smooth;
+}
+
+body{
+  margin:0;
+  background:#050505;
+  color:white;
+  overflow-x:hidden;
+  font-family:Inter,sans-serif;
+}
+
+/* GRID */
+
+.grid-mask{
+
+position:absolute;
+
+inset:0;
+
+background-image:
+linear-gradient(rgba(255,215,0,.15) 1px,transparent 1px),
+linear-gradient(90deg,rgba(255,215,0,.15) 1px,transparent 1px);
+
+background-size:55px 55px;
+
+opacity:.35;
+
+mask-image:radial-gradient(circle,black 45%,transparent 100%);
+
+animation:gridMove 12s linear infinite;
+
+}
+
+@keyframes gridMove{
+
+from{
+
+transform:translateY(0px);
+
+}
+
+to{
+
+transform:translateY(55px);
+
+}
+
+}
+
+
+/* PARTICLES */
+
+.particle{
+
+position:absolute;
+
+width:3px;
+
+height:3px;
+
+border-radius:9999px;
+
+background:#FFD700;
+
+box-shadow:0 0 18px gold;
+
+animation:float infinite ease-in-out;
+
+opacity:.7;
+
+}
+
+@keyframes float{
+
+0%{
+
+transform:translateY(0);
+
+opacity:.2;
+
+}
+
+50%{
+
+opacity:1;
+
+}
+
+100%{
+
+transform:translateY(-140px);
+
+opacity:0;
+
+}
+
+}
