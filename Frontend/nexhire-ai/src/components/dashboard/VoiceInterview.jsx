@@ -23,6 +23,12 @@ import {
   RefreshCw,
   TrendingUp,
   AlertCircle,
+  HelpCircle,
+  ShieldCheck,
+  Zap,
+  Target,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import API from "../../Api";
@@ -60,6 +66,13 @@ const ROUNDS_CONFIG = [
   },
 ];
 
+const DIFFICULTY_STYLES = {
+  beginner: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+  medium: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
+  advanced: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  hard: "bg-red-500/20 text-red-300 border-red-500/30",
+};
+
 export default function VoiceInterview({
   session,
   confirmedSkills = [],
@@ -76,6 +89,7 @@ export default function VoiceInterview({
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [questionTimeLeft, setQuestionTimeLeft] = useState(90);
   const [isMuted, setIsMuted] = useState(false);
+  const [showAiInsight, setShowAiInsight] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -169,13 +183,13 @@ export default function VoiceInterview({
       recognition.onresult = (event) => {
         let transcript = "";
         for (let i = 0; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
+          transcript += event.results[i][0].transcript + " ";
         }
-        setCandidateSpeechText(transcript);
+        setCandidateSpeechText(transcript.trim());
       };
 
-      recognition.onerror = (err) => {
-        console.warn("Speech recognition notice:", err);
+      recognition.onerror = (event) => {
+        console.warn("Speech recognition error:", event.error);
       };
 
       recognitionRef.current = recognition;
@@ -185,16 +199,11 @@ export default function VoiceInterview({
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // 1. START INTERVIEW FOR SELECTED ROUND
-  const handleStartRound = async (roundKey = selectedRoundKey) => {
-    if (!confirmedSkills || confirmedSkills.length === 0) {
-      toast.error("Please upload your resume and confirm skills for this role first!");
-      return;
-    }
-
+  // 1. START INTERVIEW FOR SPECIFIC ROUND
+  const handleStartRound = async (roundKey) => {
     try {
       setIsLoading(true);
       const res = await API.post("/interview/start", {
@@ -206,29 +215,25 @@ export default function VoiceInterview({
       setInterview(res.data.interview);
       setSelectedRoundKey(roundKey);
       if (onSessionUpdate) onSessionUpdate(res.data.interview);
-      toast.success(`${roundKey === "ROUND_1_TECHNICAL" ? "Round 1: Technical Interview" : roundKey === "ROUND_2_MANAGERIAL" ? "Round 2: Managerial Round" : "Round 3: HR Discussion"} started! 🎙️`);
+
+      toast.success(`Started ${ROUNDS_CONFIG.find((r) => r.key === roundKey)?.name} with AI Orchestrator 🚀`);
     } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Failed to start interview round");
+      console.error("Start interview error:", err);
+      toast.error(err.response?.data?.message || "Failed to start round");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. SWITCH OR DIRECTLY JUMP TO A SPECIFIC ROUND
+  // 2. SWITCH INTERVIEW ROUND TAB
   const handleSwitchRound = async (roundKey) => {
     setSelectedRoundKey(roundKey);
-    if (!interview) {
-      handleStartRound(roundKey);
-      return;
-    }
+    if (!interview) return;
 
     try {
       setIsLoading(true);
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-
       const res = await API.post("/interview/switch-round", {
-        interviewId: interview.interviewId || interview._id,
+        interviewId: interview.interviewId,
         round: roundKey,
         targetRole,
         skills: confirmedSkills,
@@ -236,7 +241,7 @@ export default function VoiceInterview({
 
       setInterview(res.data.interview);
       if (onSessionUpdate) onSessionUpdate(res.data.interview);
-      toast.success(`Switched to ${roundKey.replace(/_/g, " ")} 🎯`);
+      toast(`Switched to ${ROUNDS_CONFIG.find((r) => r.key === roundKey)?.name} 🎯`);
     } catch (err) {
       console.error(err);
       toast.error("Failed to switch round");
@@ -245,15 +250,13 @@ export default function VoiceInterview({
     }
   };
 
-  // 3. PROCEED TO NEXT ROUND (GATED TRANSITION)
+  // 3. PROCEED TO NEXT ROUND
   const handleProceedToNextRound = async () => {
     if (!interview) return;
     try {
       setIsLoading(true);
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-
       const res = await API.post("/interview/proceed-round", {
-        interviewId: interview.interviewId || interview._id,
+        interviewId: interview.interviewId,
       });
 
       setInterview(res.data.interview);
@@ -261,41 +264,36 @@ export default function VoiceInterview({
         setSelectedRoundKey(res.data.interview.currentRound);
       }
       if (onSessionUpdate) onSessionUpdate(res.data.interview);
-      toast.success(`Promoted to ${res.data.interview.currentRound}! Welcome 🚀`);
+      toast.success(res.data.message || "Proceeded to next round 🚀");
     } catch (err) {
       console.error(err);
-      toast.error("Failed to proceed to next round");
+      toast.error(err.response?.data?.message || "Failed to proceed to next round");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 4. TOGGLE RECORDING
+  // 4. START RECORDING AUDIO
   const handleStartRecording = async () => {
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     setIsSpeakingAI(false);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      const mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
-      mediaRecorder.onstop = () => {
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      mediaRecorderRef.current = mediaRecorder;
-
+      mediaRecorder.start(250);
       setIsRecording(true);
-      setRecordingSeconds(0);
       setCandidateSpeechText("");
+      setRecordingSeconds(0);
 
       if (recognitionRef.current) {
         try {
@@ -306,20 +304,17 @@ export default function VoiceInterview({
       recordingTimerRef.current = setInterval(() => {
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
-
-      toast("Recording your answer... Speak clearly 🎙️", { icon: "🎤" });
     } catch (err) {
       console.error("Microphone access error:", err);
-      toast.error("Microphone access denied. Please allow microphone in browser.");
-      setIsRecording(true);
+      toast.error("Microphone access denied. You can still type your answer.");
     }
   };
 
-  // 5. STOP RECORDING & SUBMIT ANSWER
-  const handleStopAndSubmit = async () => {
-    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-    setIsRecording(false);
+  // 5. STOP RECORDING & SUBMIT TO AI ORCHESTRATOR
+  const handleStopAndSubmit = () => {
+    if (!isRecording) return;
 
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -328,23 +323,29 @@ export default function VoiceInterview({
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        submitCandidateAnswer(audioBlob, candidateSpeechText, recordingSeconds);
+        // Stop all audio tracks
+        mediaRecorderRef.current.stream?.getTracks().forEach((track) => track.stop());
+      };
+    } else {
+      submitCandidateAnswer(null, candidateSpeechText, recordingSeconds);
     }
 
-    const recordedDuration = recordingSeconds || 15;
-    const finalTranscript =
-      candidateSpeechText.trim() ||
-      "I have worked on this during my technical projects and understand the core architecture.";
+    setIsRecording(false);
+  };
 
+  const submitCandidateAnswer = async (audioBlob, textAnswer, durationSec) => {
     try {
       setIsLoading(true);
       const formData = new FormData();
       formData.append("interviewId", interview.interviewId);
-      formData.append("text", finalTranscript);
-      formData.append("duration", recordedDuration);
+      formData.append("text", textAnswer || "I have implemented these architecture principles in production.");
+      formData.append("duration", durationSec || 15);
 
-      if (audioChunksRef.current.length > 0) {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        formData.append("audio", audioBlob, `candidate-answer-${Date.now()}.webm`);
+      if (audioBlob) {
+        formData.append("audio", audioBlob, `answer_${Date.now()}.webm`);
       }
 
       const res = await API.post("/interview/answer", formData, {
@@ -356,9 +357,16 @@ export default function VoiceInterview({
       setCandidateSpeechText("");
 
       if (res.data.isRoundCompleted) {
-        toast.success(`Round assessment generated! Check your recommendation below 🏆`, { duration: 4000 });
+        toast.success(`Round completed! Review your assessment and next strategy below 🏆`, { duration: 4000 });
       } else {
-        toast.success("Answer evaluated by AI! Next question loaded 💡");
+        const diffAction = res.data.difficultyAction;
+        if (diffAction === "increase") {
+          toast.success("Strong answer! Difficulty dynamically increased 📈");
+        } else if (diffAction === "remediate") {
+          toast("Adaptive follow-up question generated for concept practice 🔄", { icon: "💡" });
+        } else {
+          toast.success("Answer evaluated by Recruiter! Next question loaded 💡");
+        }
       }
     } catch (err) {
       console.error("Submit answer error:", err);
@@ -432,7 +440,7 @@ export default function VoiceInterview({
   const handleEndInterview = async () => {
     if (!interview) return;
     if (window.speechSynthesis) window.speechSynthesis.cancel();
-    if (!window.confirm("Are you sure you want to finalize the interview and generate your complete AI Recruiter Decision?")) {
+    if (!window.confirm("Finalize interview now and generate Career Coach Roadmap & Hiring Decision?")) {
       return;
     }
 
@@ -443,7 +451,7 @@ export default function VoiceInterview({
       });
       setInterview(res.data.interview);
       if (onSessionUpdate) onSessionUpdate(res.data.interview);
-      toast.success("Interview completed! Recruiter Decision generated 🎯");
+      toast.success("Interview completed! Career Coach Roadmap generated 🎯");
     } catch (err) {
       console.error(err);
       toast.error("Failed to end interview");
@@ -456,6 +464,10 @@ export default function VoiceInterview({
   const activeRoleDisplay = interview?.targetRole || targetRole;
   const activeRoundKey = interview?.currentRound || selectedRoundKey;
   const activeRoundConfig = ROUNDS_CONFIG.find((r) => r.key === activeRoundKey) || ROUNDS_CONFIG[0];
+  const activeDifficulty = interview?.difficultyLevel || "medium";
+
+  const currentQObj = interview?.questions?.[interview?.currentQuestionIndex] || null;
+  const currentAiReasoning = currentQObj?.aiReasoning || interview?.agentReasoning?.[interview?.currentQuestionIndex]?.reason || "";
 
   // Check if current round has a completed recommendation
   const currentRoundRecommendation = (interview?.roundRecommendations || []).find(
@@ -475,7 +487,7 @@ export default function VoiceInterview({
                 <Mic className="text-yellow-400" size={22} />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">Realistic 3-Round AI Interview</h2>
+                <h2 className="text-xl font-bold text-white">Adaptive Agentic Interview</h2>
                 <p className="text-xs text-yellow-400/80 font-semibold flex items-center gap-1">
                   <Briefcase size={12} /> Target Role: {activeRoleDisplay}
                 </p>
@@ -539,7 +551,7 @@ export default function VoiceInterview({
             </h3>
             <p className="text-gray-400 text-xs max-w-md mb-2 leading-relaxed">
               {hasSkills
-                ? `AI Senior Interviewer will conduct a realistic, high-impact ${selectedRoundKey.replace(/_/g, " ")} tailored to your skills (${confirmedSkills.slice(0, 4).join(", ")}) and provide personalized promotion recommendations.`
+                ? `The AI Supervisor will plan your round, retrieve grounded technical knowledge from the RAG store, evaluate your answers with a 5-factor rubric, and adapt question difficulty deterministically.`
                 : `Please select or upload your resume for "${activeRoleDisplay}" in the Resume panel on the left to begin.`}
             </p>
           </div>
@@ -557,7 +569,7 @@ export default function VoiceInterview({
           >
             {isLoading ? (
               <>
-                <Loader2 className="animate-spin" size={20} /> Starting Round...
+                <Loader2 className="animate-spin" size={20} /> Orchestrating Interview...
               </>
             ) : !hasSkills ? (
               <>
@@ -598,6 +610,16 @@ export default function VoiceInterview({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Adaptive Difficulty Badge */}
+            <span
+              className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-bold capitalize border flex items-center gap-1 ${
+                DIFFICULTY_STYLES[activeDifficulty] || DIFFICULTY_STYLES.medium
+              }`}
+            >
+              <Zap size={12} />
+              {activeDifficulty}
+            </span>
+
             <button
               onClick={() => {
                 setIsMuted(!isMuted);
@@ -747,7 +769,7 @@ export default function VoiceInterview({
                   className="w-full sm:flex-1 py-3.5 rounded-xl bg-gradient-to-r from-green-400 to-emerald-600 text-black font-extrabold text-xs md:text-sm hover:scale-[1.02] transition flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(34,197,94,0.3)]"
                 >
                   <Award size={16} />
-                  <span>View Final Hiring Offer & Decision</span>
+                  <span>View Career Intelligence & Final Decision</span>
                 </button>
               )}
 
@@ -765,7 +787,7 @@ export default function VoiceInterview({
           /* ACTIVE QUESTION & VOICE ENGINE CONTAINER */
           <div className="bg-[#0A0A0A] rounded-2xl p-6 border border-yellow-500/10 relative overflow-hidden">
             {/* Status Header */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div
                   className={`h-2.5 w-2.5 rounded-full ${
@@ -803,24 +825,47 @@ export default function VoiceInterview({
             </div>
 
             {/* Current Question Text */}
-            <div className="mb-3.5">
+            <div className="mb-3">
               <h3 className="text-base md:text-lg font-bold text-white leading-relaxed">
                 {interview.currentQuestionText ||
                   "Tell me about yourself and your technical experience."}
               </h3>
             </div>
 
+            {/* AI Reasoning / Why this question Accordion */}
+            {currentAiReasoning && (
+              <div className="mb-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAiInsight(!showAiInsight)}
+                  className="text-[11px] text-yellow-400/80 hover:text-yellow-300 flex items-center gap-1 font-medium transition"
+                >
+                  <Sparkles size={12} />
+                  <span>Why this question?</span>
+                  {showAiInsight ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+                {showAiInsight && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-white/[0.03] border border-yellow-500/15 text-xs text-gray-300 leading-relaxed font-sans">
+                    {currentAiReasoning}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Replay AI Voice */}
-            <div className="flex items-center justify-between mb-5 pb-3.5 border-b border-white/5">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
               <button
                 onClick={() => speakAIQuestion(interview.currentQuestionText)}
                 className="text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1.5 transition"
               >
                 <Volume2 size={13} /> Replay AI Voice
               </button>
-              <span className="text-xs text-gray-500 font-medium">
-                {activeRoundConfig.shortName}
-              </span>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500 font-medium">
+                  {activeRoundConfig.shortName}
+                </span>
+             
+              </div>
             </div>
 
             {/* Live Transcript / Spoken Preview */}
@@ -837,7 +882,7 @@ export default function VoiceInterview({
             )}
 
             {/* Center Voice Controls (Mic Button) */}
-            <div className="flex justify-center items-center gap-4 mb-5">
+            <div className="flex justify-center items-center gap-4 mb-4">
               <button
                 onClick={handleTogglePause}
                 disabled={interview.status === "COMPLETED"}
@@ -915,7 +960,7 @@ export default function VoiceInterview({
                 className="w-full py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-500/30 transition flex items-center justify-center gap-1.5"
               >
                 <Square size={15} />
-                End All Rounds & View Hiring Offer
+                End All Rounds & View Career Intelligence
               </button>
             )}
           </div>

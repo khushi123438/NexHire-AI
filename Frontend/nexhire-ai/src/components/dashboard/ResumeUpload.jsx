@@ -20,8 +20,9 @@ const POPULAR_ROLES = [
   "Frontend Developer",
   "Backend Developer",
   "Full Stack Developer",
-  "Data Scientist / AI Engineer",
+  "Data Scientist",
   "DevOps / Cloud Engineer",
+  "AI Engineer / ML Engineer"
 ];
 
 export default function ResumeUpload({

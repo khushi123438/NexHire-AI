@@ -15,7 +15,7 @@ import ConversationHistory from "../components/dashboard/ConversationHistory";
 import EvaluationPanel from "../components/dashboard/EvaluationPanel";
 import RecruiterDecision from "../components/dashboard/RecruiterDecision";
 import RoleInterviewSwitcher from "../components/dashboard/RoleInterviewSwitcher";
-import { Briefcase, FileText, MessageSquare, Plus } from "lucide-react";
+import { Briefcase, FileText, MessageSquare, Plus, Brain, ArrowRight, Sparkles } from "lucide-react";
 
 const STANDARD_ROLES = [
   "Software Development Engineer (SDE)",
@@ -24,7 +24,9 @@ const STANDARD_ROLES = [
   "Full Stack Developer",
   "Data Scientist / AI Engineer",
   "DevOps / Cloud Engineer",
+  "AI Engineer / ML Engineer"
 ];
+ 
 
 export default function Dashboard() {
   const [userName, setUserName] = useState("Candidate");
@@ -250,6 +252,35 @@ export default function Dashboard() {
 
           {/* Real-time Summary Cards */}
           <StatsCards stats={stats} />
+
+          {/* AI Career Intelligence Hub Quick Access Banner */}
+          <div className="bg-gradient-to-r from-yellow-500/15 via-yellow-500/5 to-transparent border border-yellow-500/30 rounded-2xl p-4 backdrop-blur-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[0_0_20px_rgba(255,215,0,0.08)]">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-yellow-500/20 text-yellow-400 flex items-center justify-center flex-shrink-0">
+                <Brain size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>AI Career Intelligence & Study Roadmap</span>
+                  <span className="text-[10px] px-2 py-0.2 rounded-full bg-yellow-500/20 text-yellow-300 font-mono">
+                    Adaptive Coach
+                  </span>
+                </h3>
+                <p className="text-xs text-gray-400">
+                  Track your persistent weakness memory, skill radar, and curated 5-day personalized study roadmap.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate("/career-intelligence")}
+              className="px-4 py-2 rounded-xl bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-400/40 text-yellow-300 font-bold text-xs flex items-center gap-1.5 transition flex-shrink-0 self-start sm:self-center"
+            >
+              <span>Open Intelligence Hub</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
 
           {/* Role Selection Tabs / Selector Bar */}
           <div className="bg-white/5 border border-yellow-500/20 rounded-2xl p-4 backdrop-blur-xl">

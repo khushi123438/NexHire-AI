@@ -1,33 +1,9 @@
 {
-  "name": "backend",
+  "name": "nexhire-ai-backend-deprecated",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "DEPRECATED: NexHire AI Backend has been completely migrated to Python/FastAPI. Use python run.py to run the backend server.",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "@google/genai": "^2.15.0",
-    "bcryptjs": "^3.0.3",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "express-session": "^1.19.0",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.8.1",
-    "multer": "^2.2.0",
-    "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0",
-    "pdf-parse": "^1.1.1",
-    "nodemailer": "^6.9.16"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.14"
+    "start": "python run.py",
+    "dev": "python run.py"
   }
 }
