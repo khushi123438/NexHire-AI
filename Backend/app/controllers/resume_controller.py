@@ -4,27 +4,13 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List
 from fastapi import UploadFile, HTTPException, status
-from pypdf import PdfReader
 from app.config.db import get_db
 from app.utils.helpers import to_object_id, serialize_doc
-from app.agents.resume.resume_agent import analyze_resume
+from app.nlp.resume_parser import extract_text_from_pdf_bytes
+from app.services.nlp_service import analyze_candidate_resume
 from app.middleware.upload import save_resume_file, BACKEND_DIR
 
-def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
-    """Extract all text from raw PDF bytes using pypdf"""
-    try:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        text_parts = []
-        for page in reader.pages:
-            t = page.extract_text()
-            if t:
-                text_parts.append(t)
-        return "\n".join(text_parts)
-    except Exception as e:
-        print(f"[PDF Parsing Error]: {e}")
-        return ""
-
-async def upload_resume_handler(file: Optional[UploadFile], target_role: str, user: dict) -> dict:
+async def upload_resume_handler(file: Optional[UploadFile], target_role: Optional[str], user: dict) -> dict:
     if not file:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -33,35 +19,45 @@ async def upload_resume_handler(file: Optional[UploadFile], target_role: str, us
 
     user_id = user["id"]
     u_id = to_object_id(user_id)
-    selected_role = (target_role or "Software Development Engineer (SDE)").strip()
+    raw_role = (target_role or "").strip()
 
     # Save uploaded PDF to uploads/resumes
     saved_meta = await save_resume_file(file)
     extracted_text = extract_text_from_pdf_bytes(saved_meta["content_bytes"])
 
-    # Run Resume Intelligence Agent
-    structured_profile = await analyze_resume(
+    # Run NLP Resume Processing Pipeline
+    structured_profile = await analyze_candidate_resume(
         resume_text=extracted_text,
         user_id=user_id,
-        target_role=selected_role
+        target_role=raw_role or None
     )
 
     extracted_skills = [s.get("name") for s in structured_profile.get("skills", []) if s.get("name")]
+    
+    # If no target role was explicitly selected, adopt top recommended role from NLP analysis
+    selected_role = raw_role or (structured_profile.get("targetRoles", [None])[0] if structured_profile.get("targetRoles") else None)
+
+    project_items = structured_profile.get("projectSummaries") or [
+        (p.get("name", "Project") if isinstance(p, dict) else str(p))
+        for p in structured_profile.get("projects", [])
+    ]
+    cert_items = structured_profile.get("certifications", [])
 
     db = get_db()
 
-    # Clean up existing resume with same targetRole
-    cursor = db.resumes.find({"user": u_id, "targetRole": selected_role})
-    async for old_res in cursor:
-        old_url = old_res.get("resumeUrl", "")
-        if old_url and old_url != saved_meta["url"]:
-            old_path = BACKEND_DIR / old_url.lstrip("/")
-            if old_path.exists():
-                try:
-                    os.remove(old_path)
-                except Exception:
-                    pass
-    await db.resumes.delete_many({"user": u_id, "targetRole": selected_role})
+    # Clean up existing resume with same targetRole if role specified
+    if selected_role:
+        cursor = db.resumes.find({"user": u_id, "targetRole": selected_role})
+        async for old_res in cursor:
+            old_url = old_res.get("resumeUrl", "")
+            if old_url and old_url != saved_meta["url"]:
+                old_path = BACKEND_DIR / old_url.lstrip("/")
+                if old_path.exists():
+                    try:
+                        os.remove(old_path)
+                    except Exception:
+                        pass
+        await db.resumes.delete_many({"user": u_id, "targetRole": selected_role})
 
     # Save new Resume in MongoDB
     new_resume = {
@@ -73,6 +69,8 @@ async def upload_resume_handler(file: Optional[UploadFile], target_role: str, us
         "skills": extracted_skills,
         "education": structured_profile.get("educationSummary", ""),
         "experience": structured_profile.get("experienceSummary", ""),
+        "projects": project_items,
+        "certifications": cert_items,
         "uploadedAt": datetime.utcnow()
     }
 
@@ -92,17 +90,21 @@ async def upload_resume_handler(file: Optional[UploadFile], target_role: str, us
     all_resumes_cursor = db.resumes.find({"user": u_id}).sort("uploadedAt", -1)
     all_resumes = [serialize_doc(r) async for r in all_resumes_cursor]
 
+    role_display = f' for "{selected_role}"' if selected_role else ""
     return {
         "success": True,
-        "message": f'Resume for "{selected_role}" uploaded and analyzed by Resume Agent 🚀',
+        "message": f'Resume{role_display} uploaded and analyzed successfully 🚀',
         "resume": serialize_doc(new_resume),
         "allResumes": all_resumes,
         "skills": extracted_skills,
         "structuredProfile": structured_profile,
+        "recommendations": structured_profile.get("recommendations", []),
+        "roleRecommendations": structured_profile.get("roleRecommendations", {}),
         "targetRole": selected_role,
     }
 
-async def analyze_resume_text_handler(resume_text: str, target_role: str, user: dict) -> dict:
+
+async def analyze_resume_text_handler(resume_text: str, target_role: Optional[str], user: dict) -> dict:
     if not resume_text:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -110,15 +112,16 @@ async def analyze_resume_text_handler(resume_text: str, target_role: str, user: 
         )
 
     user_id = user["id"]
-    structured_profile = await analyze_resume(
+    structured_profile = await analyze_candidate_resume(
         resume_text=resume_text,
         user_id=user_id,
-        target_role=target_role or "Software Development Engineer (SDE)"
+        target_role=target_role or None
     )
 
     return {
         "success": True,
-        "structuredProfile": structured_profile
+        "structuredProfile": structured_profile,
+        "roleRecommendations": structured_profile.get("roleRecommendations", {})
     }
 
 async def get_candidate_profile_handler(user: dict) -> dict:
@@ -131,10 +134,10 @@ async def get_candidate_profile_handler(user: dict) -> dict:
     if not profile:
         latest_resume = await db.resumes.find_one({"user": u_id}, sort=[("uploadedAt", -1)])
         if latest_resume:
-            profile = await analyze_resume(
+            profile = await analyze_candidate_resume(
                 resume_text=latest_resume.get("extractedText", ""),
                 user_id=user_id,
-                target_role=latest_resume.get("targetRole", "Software Development Engineer (SDE)")
+                target_role=latest_resume.get("targetRole")
             )
 
     return {

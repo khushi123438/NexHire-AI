@@ -163,79 +163,163 @@ ROLE_TECHNICAL_FALLBACKS: Dict[str, List[Dict[str, Any]]] = {
     ],
 }
 
+def is_semantic_duplicate(new_q: str, previous_questions: List[str], threshold: float = 0.65) -> bool:
+    """Check lexical & jaccard semantic token similarity against previous questions"""
+    if not new_q or not previous_questions:
+        return False
+    
+    def tokenize(text: str) -> set:
+        clean = re.sub(r'[^\w\s]', '', text.lower())
+        stopwords = {"what", "how", "why", "can", "you", "explain", "describe", "the", "a", "an", "in", "of", "to", "for", "with", "on", "is", "are", "tell", "me", "about"}
+        return set(w for w in clean.split() if len(w) > 2 and w not in stopwords)
+
+    new_tokens = tokenize(new_q)
+    if not new_tokens:
+        return False
+
+    for prev in previous_questions:
+        prev_tokens = tokenize(prev)
+        if not prev_tokens:
+            continue
+        intersection = len(new_tokens & prev_tokens)
+        union = len(new_tokens | prev_tokens)
+        similarity = intersection / union if union > 0 else 0.0
+        if similarity >= threshold or new_q.strip().lower() == prev.strip().lower():
+            return True
+    return False
+
 async def generate_question(
     candidate_name: str = "Candidate",
     target_role: str = "Software Development Engineer (SDE)",
     round: str = "ROUND_1_TECHNICAL",
+    current_domain: str = "Core Engineering",
     current_topic: str = "Core Fundamentals",
     difficulty: str = "medium",
+    candidate_skills: Optional[List[str]] = None,
+    candidate_projects: Optional[List[Any]] = None,
+    candidate_experience: str = "",
     previous_answer: str = "",
     last_evaluation: Optional[Dict[str, Any]] = None,
-    rag_context: str = "",
+    weak_areas: Optional[List[str]] = None,
     candidate_memory_summary: str = "",
+    rag_context: str = "",
     question_index: int = 0,
     is_follow_up: bool = False,
     previous_questions: Optional[List[str]] = None,
-    candidate_projects: Optional[List[str]] = None,
     candidate_id: Any = None,
     interview_id: str = ""
 ) -> Dict[str, Any]:
     """
     Agent 4: Question Generation Agent
-    Formulates grounded, adaptive, strictly NON-CODING questions tailored to the candidate's target role,
-    projects, skills, RAG context, and candidate performance memory.
-    Enforces dynamic question generation with anti-repetition tracking.
+    Generates dynamic, grounded, strictly NON-CODING interview questions matching the candidate's actual resume,
+    skills, projects, experience, performance history, weak areas, candidate memory, and RAG context.
+    Avoids repetitions and semantic duplicates.
     """
     if previous_questions is None:
         previous_questions = []
+    if candidate_skills is None:
+        candidate_skills = []
     if candidate_projects is None:
         candidate_projects = []
+    if weak_areas is None:
+        weak_areas = []
 
-    eval_snippet = "N/A"
+    eval_snippet = "No prior answer in this session."
     if last_evaluation:
         eval_snippet = json.dumps({
             "score": last_evaluation.get("overall", last_evaluation.get("technicalAccuracy", 8)),
-            "missing": last_evaluation.get("missingConcepts", [])
+            "missingConcepts": last_evaluation.get("missingConcepts", []),
+            "feedback": last_evaluation.get("feedback", "")
         })
 
-    previous_questions_str = "\n".join([f"- {q}" for q in previous_questions[-6:]]) if previous_questions else "None yet"
-    projects_str = ", ".join(candidate_projects) if candidate_projects else "Standard engineering projects"
+    # Format projects context
+    formatted_projects = []
+    for p in candidate_projects:
+        if isinstance(p, dict):
+            techs = f" (Tech: {', '.join(p.get('technologies', []))})" if p.get("technologies") else ""
+            formatted_projects.append(f"- {p.get('name', 'Project')}{techs}: {p.get('description', '')} {p.get('impact', '')}")
+        elif isinstance(p, str):
+            formatted_projects.append(f"- {p}")
+    projects_str = "\n".join(formatted_projects) if formatted_projects else "General software & technical project experience"
+
+    previous_questions_str = "\n".join([f"- {q}" for q in previous_questions]) if previous_questions else "None (Opening question of session)"
+    skills_str = ", ".join(candidate_skills) if candidate_skills else "General technical skills"
+    weak_areas_str = ", ".join(weak_areas) if weak_areas else "None identified"
+
+    # Select dynamic question type to ensure variety
+    question_types = [
+        "Conceptual", "Practical", "Scenario-based", "Project-based",
+        "Resume-specific", "Why/How", "Debugging", "Architecture",
+        "Trade-off", "Real-world", "Follow-up", "Problem diagnosis", "Decision-making"
+    ]
+    recommended_type = "Follow-up" if is_follow_up else question_types[question_index % len(question_types)]
 
     prompt = f"""
-You are the Question Generation Agent for NexHire AI.
-Generate a highly targeted, realistic spoken interview question for a candidate applying for "{target_role}".
+You are an adaptive technical interviewer.
 
-Context & Parameters:
-- Candidate Name: "{candidate_name}"
-- Target Role: "{target_role}"
-- Current Round: "{round}" (Question #{question_index + 1})
-- Target Topic: "{current_topic}"
-- Current Difficulty Level: "{difficulty}"
-- Candidate Resume Projects: {projects_str}
-- Is Follow-up Probe: {'YES (Probe edge-cases or missing concepts from last answer)' if is_follow_up else 'NO'}
-- Previous Candidate Answer: "{previous_answer[:400] if previous_answer else 'N/A - Opening Question'}"
-- Previous Evaluation: {eval_snippet}
-- Already Asked Questions (STRICTLY DO NOT REPEAT ANY OF THESE):
+Generate the next interview question for this candidate.
+
+Target Role:
+{target_role}
+
+Candidate Skills:
+{skills_str}
+
+Projects:
+{projects_str}
+
+Experience:
+{candidate_experience or 'Demonstrated technical engineering experience.'}
+
+Current Domain:
+{current_domain or target_role}
+
+Current Topic:
+{current_topic}
+
+Current Difficulty:
+{difficulty}
+
+Recommended Question Category:
+{recommended_type} (e.g. Conceptual, Practical, Scenario-based, Project-based, Resume-specific, Why/How, Debugging, Architecture, Trade-off, Real-world, Follow-up, Problem diagnosis, Decision-making)
+
+Previous Questions:
 {previous_questions_str}
-- RAG Technical Grounding Context:
-{rag_context or "No domain context."}
-- Candidate Performance Memory:
-{candidate_memory_summary or "Clean slate."}
 
-STRICT NON-CODING RULES:
-1. DO NOT ask the candidate to write code, implement algorithms, write functions, or solve coding puzzles (NO LeetCode).
-2. DO ask conceptual, architectural, debugging scenario, project-based, trade-off, concurrency, and real-world system design questions.
-3. Ground the question in the candidate's target role ("{target_role}"), topic ("{current_topic}"), and mentioned projects where appropriate.
-4. Keep the questionText natural and concise for Text-to-Speech (1 to 2 spoken sentences).
-5. Ensure the question is fresh and completely distinct from all previously asked questions.
+Previous Performance:
+{eval_snippet}
 
-Return ONLY valid JSON:
+Known Weak Areas:
+{weak_areas_str}
+
+Candidate Memory:
+{candidate_memory_summary or 'Clean slate / no recorded persistent weaknesses.'}
+
+Retrieved RAG Context:
+{rag_context or 'Use foundational industry best practices for ' + target_role + '.'}
+
+Requirements:
+1. Generate exactly one question.
+2. Do not repeat previous questions.
+3. Avoid semantic duplicates of any previously asked question.
+4. Prefer resume-specific and project-specific questions when relevant.
+5. Adapt difficulty to the candidate's performance ({difficulty}).
+6. Use realistic, natural spoken interview language (1-2 sentences).
+7. Do not ask coding/programming implementation questions (NO 'write code', NO LeetCode).
+8. Focus on conceptual, practical, scenario-based, project-based, architecture, debugging, trade-off, and real-world questions.
+9. Use the RAG context for factual grounding.
+10. Do not mention that RAG or an AI system was used.
+11. Do not fabricate experience that is not present in the resume.
+
+Return ONLY valid JSON in this exact structure:
 {{
-  "questionText": "Clear spoken interview question...",
+  "questionText": "Realistic interview question...",
+  "questionType": "{recommended_type}",
   "topic": "{current_topic}",
+  "domain": "{current_domain or target_role}",
   "difficulty": "{difficulty}",
   "expectedConcepts": ["Key Concept 1", "Key Concept 2", "Key Concept 3"],
-  "aiReasoning": "Selected to evaluate candidate understanding of ... for {target_role}.",
+  "aiReasoning": "Why this question was generated based on candidate profile, target role, and difficulty.",
   "isFollowUp": {'true' if is_follow_up else 'false'},
   "stage": "TECHNICAL"
 }}
@@ -253,15 +337,16 @@ Return ONLY valid JSON:
         parsed = parse_ai_json(llm_result["text"], None)
         if parsed and parsed.get("questionText"):
             q_text = parsed["questionText"].strip()
-            # Verify it's not a duplicate of a previous question
-            is_dup = any(q_text.lower() == prev.strip().lower() for prev in previous_questions)
-            if not is_dup:
+            # Verify anti-repetition and semantic duplicate avoidance
+            if not is_semantic_duplicate(q_text, previous_questions):
                 return {
                     "questionText": q_text,
+                    "questionType": parsed.get("questionType", recommended_type),
                     "topic": parsed.get("topic", current_topic),
+                    "domain": parsed.get("domain", current_domain),
                     "difficulty": parsed.get("difficulty", difficulty),
                     "expectedConcepts": parsed.get("expectedConcepts", [current_topic]) if isinstance(parsed.get("expectedConcepts"), list) else [current_topic],
-                    "aiReasoning": parsed.get("aiReasoning", f"Targeted question on {current_topic} for {target_role} at {difficulty} level."),
+                    "aiReasoning": parsed.get("aiReasoning", f"Dynamic {recommended_type} question on {current_topic} for {target_role}."),
                     "isFollowUp": bool(parsed.get("isFollowUp", is_follow_up)),
                     "stage": parsed.get("stage", ("MANAGERIAL" if round == "ROUND_2_MANAGERIAL" else ("HR" if round == "ROUND_3_HR" else "TECHNICAL"))),
                     "ragSource": current_topic if rag_context else "Role Knowledge Base"
@@ -273,22 +358,35 @@ Return ONLY valid JSON:
             {
                 "questionText": f"Can you describe a situation in your work as a {target_role} where you had a critical disagreement with a teammate on architecture or tooling, and how you reached a consensus?",
                 "topic": "Teamwork & Conflict Resolution",
+                "questionType": "Scenario-based",
                 "expectedConcepts": ["STAR Framework", "Data-driven decisions", "Disagree and Commit", "Constructive Communication"],
                 "aiReasoning": f"Assessing team collaboration and constructive dispute resolution for {target_role}.",
             },
             {
                 "questionText": "Tell me about a high-severity production outage or critical deadline crunch you managed. How did you triage, resolve it under pressure, and prevent regression?",
                 "topic": "Production Outages & Incident Management",
+                "questionType": "Real-world",
                 "expectedConcepts": ["Root Cause Analysis", "Monitoring", "Post-mortem", "Zero Downtime"],
                 "aiReasoning": "Probing resilience and production incident diagnosis under strict deadlines.",
             },
             {
                 "questionText": "How do you balance the trade-offs between rapid feature delivery requested by business stakeholders versus refactoring technical debt and maintaining high code maintainability?",
                 "topic": "Project Ownership & Trade-offs",
+                "questionType": "Trade-off",
                 "expectedConcepts": ["Technical Debt", "Prioritization", "Maintainability", "Agile Velocity"],
                 "aiReasoning": "Evaluating engineering leadership and pragmatic prioritization.",
             },
         ]
+        # Pick non-duplicate fallback
+        for candidate_fb in managerial_fallbacks:
+            if not is_semantic_duplicate(candidate_fb["questionText"], previous_questions):
+                return {
+                    **candidate_fb,
+                    "difficulty": difficulty,
+                    "isFollowUp": is_follow_up,
+                    "stage": "MANAGERIAL",
+                    "ragSource": "Managerial Competencies",
+                }
         picked = managerial_fallbacks[question_index % len(managerial_fallbacks)]
         return {
             **picked,
@@ -301,24 +399,36 @@ Return ONLY valid JSON:
     if round == "ROUND_3_HR":
         hr_fallbacks = [
             {
-                "questionText": f"What key factors motivated you to apply for the {target_role} position with us, and where do you see your engineering growth over the next two to three years?",
+                "questionText": f"What key factors motivated you to apply for the {target_role} position with us, and where do you see your professional growth over the next two to three years?",
                 "topic": "Career Aspirations & Culture Fit",
+                "questionType": "Conceptual",
                 "expectedConcepts": ["Career Alignment", "Culture Fit", "Continuous Learning", "Team Impact"],
                 "aiReasoning": f"Evaluating motivation and long-term career alignment with {target_role} expectations.",
             },
             {
                 "questionText": f"What are your salary expectations for this {target_role} role, and what are your preferences regarding work environment and joining availability?",
                 "topic": "Compensation & Work Logistics",
+                "questionType": "Practical",
                 "expectedConcepts": ["Market Alignment", "Work Flexibility", "Notice Period"],
                 "aiReasoning": "Clarifying expectations regarding compensation and onboarding timelines.",
             },
             {
                 "questionText": "What type of team culture empowers you to do your highest quality work, and what questions do you have for our leadership team?",
                 "topic": "Workplace Ethics & Values",
+                "questionType": "Conceptual",
                 "expectedConcepts": ["Team Culture", "Engineering Standards", "Curiosity"],
                 "aiReasoning": "Checking organizational values alignment and candidate initiative.",
             },
         ]
+        for candidate_fb in hr_fallbacks:
+            if not is_semantic_duplicate(candidate_fb["questionText"], previous_questions):
+                return {
+                    **candidate_fb,
+                    "difficulty": difficulty,
+                    "isFollowUp": is_follow_up,
+                    "stage": "HR",
+                    "ragSource": "HR & Culture",
+                }
         picked = hr_fallbacks[question_index % len(hr_fallbacks)]
         return {
             **picked,
@@ -328,14 +438,31 @@ Return ONLY valid JSON:
             "ragSource": "HR & Culture",
         }
 
-    # Technical Round fallback selected from role-specific catalog
+    # Technical Round fallback selected from role-specific catalog with anti-duplicate selection
     role_catalog = ROLE_TECHNICAL_FALLBACKS.get(
         target_role,
-        ROLE_TECHNICAL_FALLBACKS["Software Development Engineer (SDE)"]
+        ROLE_TECHNICAL_FALLBACKS.get("Software Development Engineer (SDE)", [])
     )
-    picked = role_catalog[question_index % len(role_catalog)]
+    for candidate_fb in role_catalog:
+        if not is_semantic_duplicate(candidate_fb["questionText"], previous_questions):
+            return {
+                **candidate_fb,
+                "questionType": recommended_type,
+                "difficulty": difficulty,
+                "isFollowUp": is_follow_up,
+                "stage": "TECHNICAL",
+                "ragSource": candidate_fb.get("topic", current_topic),
+            }
+
+    picked = role_catalog[question_index % len(role_catalog)] if role_catalog else {
+        "questionText": f"In your experience as a {target_role}, how do you evaluate architecture trade-offs for performance and maintainability?",
+        "topic": current_topic,
+        "expectedConcepts": [current_topic],
+        "aiReasoning": f"Grounded technical question for {target_role}."
+    }
     return {
         **picked,
+        "questionType": recommended_type,
         "difficulty": difficulty,
         "isFollowUp": is_follow_up,
         "stage": "TECHNICAL",

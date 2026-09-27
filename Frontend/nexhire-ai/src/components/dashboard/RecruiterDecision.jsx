@@ -142,12 +142,12 @@ export default function RecruiterDecision({
           <div className="bg-[#0A0A0A] rounded-2xl p-4 border border-yellow-500/10 hover:border-yellow-500/30 transition text-center">
             <p className="text-gray-400 text-xs mb-1">Technical Fit</p>
             <p className="text-3xl font-black text-yellow-400 font-mono">
-              {decision.technicalFit ?? 85}%
+              {typeof decision.technicalFit === "number" ? `${decision.technicalFit}%` : "--"}
             </p>
             <div className="w-full bg-white/[0.05] rounded-full h-1.5 mt-2 overflow-hidden">
               <div
                 className="bg-yellow-400 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${decision.technicalFit ?? 85}%` }}
+                style={{ width: `${typeof decision.technicalFit === "number" ? Math.min(100, decision.technicalFit) : 0}%` }}
               />
             </div>
           </div>
@@ -155,12 +155,12 @@ export default function RecruiterDecision({
           <div className="bg-[#0A0A0A] rounded-2xl p-4 border border-yellow-500/10 hover:border-yellow-500/30 transition text-center">
             <p className="text-gray-400 text-xs mb-1">Managerial Fit</p>
             <p className="text-3xl font-black text-white font-mono">
-              {decision.communicationFit ?? 82}%
+              {typeof decision.communicationFit === "number" ? `${decision.communicationFit}%` : "--"}
             </p>
             <div className="w-full bg-white/[0.05] rounded-full h-1.5 mt-2 overflow-hidden">
               <div
                 className="bg-purple-400 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${decision.communicationFit ?? 82}%` }}
+                style={{ width: `${typeof decision.communicationFit === "number" ? Math.min(100, decision.communicationFit) : 0}%` }}
               />
             </div>
           </div>
@@ -168,12 +168,12 @@ export default function RecruiterDecision({
           <div className="bg-[#0A0A0A] rounded-2xl p-4 border border-yellow-500/10 hover:border-yellow-500/30 transition text-center">
             <p className="text-gray-400 text-xs mb-1">Cultural Fit</p>
             <p className="text-3xl font-black text-white font-mono">
-              {decision.culturalFit ?? 88}%
+              {typeof decision.culturalFit === "number" ? `${decision.culturalFit}%` : "--"}
             </p>
             <div className="w-full bg-white/[0.05] rounded-full h-1.5 mt-2 overflow-hidden">
               <div
                 className="bg-green-400 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${decision.culturalFit ?? 88}%` }}
+                style={{ width: `${typeof decision.culturalFit === "number" ? Math.min(100, decision.culturalFit) : 0}%` }}
               />
             </div>
           </div>
@@ -181,12 +181,12 @@ export default function RecruiterDecision({
           <div className="bg-[#0A0A0A] rounded-2xl p-4 border border-yellow-500/10 hover:border-yellow-500/30 transition text-center">
             <p className="text-gray-400 text-xs mb-1">Hiring Confidence</p>
             <p className="text-3xl font-black text-green-400 font-mono">
-              {decision.overallHiringConfidence ?? 85}%
+              {typeof decision.overallHiringConfidence === "number" ? `${decision.overallHiringConfidence}%` : "--"}
             </p>
             <div className="w-full bg-white/[0.05] rounded-full h-1.5 mt-2 overflow-hidden">
               <div
                 className="bg-gradient-to-r from-yellow-400 to-green-400 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${decision.overallHiringConfidence ?? 85}%` }}
+                style={{ width: `${typeof decision.overallHiringConfidence === "number" ? Math.min(100, decision.overallHiringConfidence) : 0}%` }}
               />
             </div>
           </div>

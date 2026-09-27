@@ -6,12 +6,14 @@ class Resume(BaseModel):
     id: Optional[str] = Field(default=None, alias="_id")
     user: Any # ObjectId or str
     fileName: str = "Resume.pdf"
-    targetRole: str = "Software Development Engineer (SDE)"
+    targetRole: Optional[str] = None
     resumeUrl: str = ""
     extractedText: str = ""
-    skills: List[str] = []
+    skills: List[str] = Field(default_factory=list)
     experience: str = ""
     education: str = ""
+    projects: List[str] = Field(default_factory=list)
+    certifications: List[str] = Field(default_factory=list)
     uploadedAt: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
     class Config:

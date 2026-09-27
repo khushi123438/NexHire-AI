@@ -4,20 +4,18 @@ from typing import Optional, List, Dict, Any
 from fastapi import UploadFile, HTTPException, status
 from app.config.db import get_db
 from app.utils.helpers import to_object_id, serialize_doc
-from app.agents.supervisor.supervisor_agent import (
-    start_orchestrated_interview,
-    process_orchestrated_answer_turn
+from app.services.interview_service import (
+    initialize_interview_session,
+    execute_interview_turn,
+    QUESTIONS_PER_ROUND
 )
-from app.services.gemini_service import generate_recruiter_decision, generate_round_recommendation
-from app.agents.career_coach.career_coach_agent import generate_learning_roadmap
+from app.services.genai_service import (
+    generate_recruiter_hiring_decision,
+    generate_round_summary_recommendation,
+    generate_candidate_learning_roadmap
+)
 from app.services.memory_service import get_candidate_weaknesses
 from app.middleware.upload import save_audio_file
-
-QUESTIONS_PER_ROUND = {
-    "ROUND_1_TECHNICAL": 4,
-    "ROUND_2_MANAGERIAL": 3,
-    "ROUND_3_HR": 3,
-}
 
 # 1. Start a New Interview Session
 async def start_interview_handler(data: dict, user: dict) -> dict:
@@ -27,11 +25,30 @@ async def start_interview_handler(data: dict, user: dict) -> dict:
         db = get_db()
 
         skills = data.get("skills")
-        target_role = (data.get("targetRole") or "Software Development Engineer (SDE)").strip()
+        target_role = (data.get("targetRole") or "").strip()
         resume_id = data.get("resumeId")
         round_name = data.get("round") or "ROUND_1_TECHNICAL"
 
-        # Resolve skills from request or resumes if missing
+        # Resolve targetRole dynamically if not explicitly given
+        if not target_role:
+            if resume_id and to_object_id(resume_id):
+                target_resume = await db.resumes.find_one({"_id": to_object_id(resume_id), "user": u_id})
+                if target_resume and target_resume.get("targetRole"):
+                    target_role = target_resume["targetRole"]
+            if not target_role:
+                latest_res = await db.resumes.find_one({"user": u_id}, sort=[("uploadedAt", -1)])
+                if latest_res and latest_res.get("targetRole"):
+                    target_role = latest_res["targetRole"]
+            if not target_role:
+                cand_prof = await db.candidateprofiles.find_one({"userId": u_id})
+                if cand_prof and cand_prof.get("targetRole"):
+                    target_role = cand_prof["targetRole"]
+                elif cand_prof and cand_prof.get("targetRoles"):
+                    target_role = cand_prof["targetRoles"][0]
+        if not target_role:
+            target_role = "Software Development Engineer (SDE)"
+
+        # Resolve skills from request, resumes, or profile if missing
         if not skills or not isinstance(skills, list) or len(skills) == 0:
             if resume_id and to_object_id(resume_id):
                 target_resume = await db.resumes.find_one({"_id": to_object_id(resume_id), "user": u_id})
@@ -50,20 +67,20 @@ async def start_interview_handler(data: dict, user: dict) -> dict:
                         skills = user["skills"]
 
         if not skills:
-            skills = ["DSA", "System Architecture", "DBMS", "JavaScript", "React.js"]
+            skills = ["Problem Solving", "Architecture", "Engineering Best Practices"]
 
         candidate_name = user.get("name") or "Candidate"
         interview_id = f"INT{random.randint(10000, 99999)}"
 
-        orchestration = await start_orchestrated_interview(
+        session_init = await initialize_interview_session(
             user_id=user_id,
             candidate_name=candidate_name,
             target_role=target_role,
-            round=round_name,
+            round_name=round_name,
             skills=skills
         )
 
-        first_q = orchestration["firstQuestion"]
+        first_q = session_init["firstQuestion"]
 
         initial_conversation = {
             "speaker": "AI_RECRUITER",
@@ -84,13 +101,13 @@ async def start_interview_handler(data: dict, user: dict) -> dict:
             "skills": skills,
             "targetRole": target_role,
             "currentRound": round_name,
-            "difficultyLevel": orchestration.get("initialDifficulty", "medium"),
+            "difficultyLevel": session_init.get("initialDifficulty", "medium"),
             "roundStatus": "IN_PROGRESS",
             "status": "IN_PROGRESS",
             "currentQuestionIndex": 0,
             "currentStage": first_q.get("stage", "TECHNICAL"),
             "currentQuestionText": first_q["questionText"],
-            "interviewPlan": orchestration.get("interviewPlan", {}),
+            "interviewPlan": session_init.get("interviewPlan", {}),
             "agentReasoning": [
                 {
                     "questionIndex": 0,
@@ -107,7 +124,7 @@ async def start_interview_handler(data: dict, user: dict) -> dict:
                     "stage": first_q.get("stage", "TECHNICAL"),
                     "targetSkill": first_q.get("topic", ""),
                     "questionText": first_q["questionText"],
-                    "difficulty": orchestration.get("initialDifficulty", "medium"),
+                    "difficulty": session_init.get("initialDifficulty", "medium"),
                     "aiReasoning": first_q.get("aiReasoning", ""),
                     "expectedConcepts": first_q.get("expectedConcepts", []),
                     "isFollowUp": False,
@@ -144,9 +161,9 @@ async def start_interview_handler(data: dict, user: dict) -> dict:
 
         return {
             "success": True,
-            "message": f'Interview started with AI Orchestration for "{target_role}" [{round_name}] 🚀',
+            "message": f'Interview started for "{target_role}" [{round_name}] 🚀',
             "interview": serialize_doc(new_interview),
-            "interviewPlan": orchestration.get("interviewPlan"),
+            "interviewPlan": session_init.get("interviewPlan"),
             "firstQuestion": first_q,
         }
     except Exception as e:
@@ -251,15 +268,15 @@ async def switch_round_handler(data: dict, user: dict) -> dict:
         active_skills = skills or (interview.get("skills") if interview else user.get("skills", ["DSA", "System Architecture", "DBMS"]))
         candidate_name = user.get("name") or (interview.get("candidateName") if interview else "Candidate")
 
-        orchestration = await start_orchestrated_interview(
+        session_init = await initialize_interview_session(
             user_id=user_id,
             candidate_name=candidate_name,
             target_role=target_role,
-            round=target_round,
+            round_name=target_round,
             skills=active_skills
         )
 
-        first_q = orchestration["firstQuestion"]
+        first_q = session_init["firstQuestion"]
 
         ai_msg = {
             "speaker": "AI_RECRUITER",
@@ -281,7 +298,7 @@ async def switch_round_handler(data: dict, user: dict) -> dict:
                 "stage": first_q.get("stage", "TECHNICAL"),
                 "targetSkill": first_q.get("topic", ""),
                 "questionText": first_q["questionText"],
-                "difficulty": orchestration.get("initialDifficulty", "medium"),
+                "difficulty": session_init.get("initialDifficulty", "medium"),
                 "aiReasoning": first_q.get("aiReasoning", ""),
                 "expectedConcepts": first_q.get("expectedConcepts", []),
                 "isFollowUp": False,
@@ -295,7 +312,7 @@ async def switch_round_handler(data: dict, user: dict) -> dict:
                 "currentRound": target_round,
                 "roundStatus": "IN_PROGRESS",
                 "status": "IN_PROGRESS",
-                "difficultyLevel": orchestration.get("initialDifficulty", "medium"),
+                "difficultyLevel": session_init.get("initialDifficulty", "medium"),
                 "currentQuestionIndex": 0,
                 "currentStage": first_q.get("stage", "TECHNICAL"),
                 "currentQuestionText": first_q["questionText"],
@@ -339,15 +356,15 @@ async def proceed_to_next_round_handler(data: dict, user: dict) -> dict:
         current_round = interview.get("currentRound", "ROUND_1_TECHNICAL")
         next_round = "ROUND_2_MANAGERIAL" if current_round == "ROUND_1_TECHNICAL" else "ROUND_3_HR"
 
-        orchestration = await start_orchestrated_interview(
+        session_init = await initialize_interview_session(
             user_id=user_id,
             candidate_name=interview.get("candidateName", "Candidate"),
             target_role=interview.get("targetRole", "Software Development Engineer (SDE)"),
-            round=next_round,
+            round_name=next_round,
             skills=interview.get("skills", [])
         )
 
-        first_q = orchestration["firstQuestion"]
+        first_q = session_init["firstQuestion"]
 
         questions = list(interview.get("questions", []))
         questions.append({
@@ -356,7 +373,7 @@ async def proceed_to_next_round_handler(data: dict, user: dict) -> dict:
             "stage": first_q.get("stage", "TECHNICAL"),
             "targetSkill": first_q.get("topic", ""),
             "questionText": first_q["questionText"],
-            "difficulty": orchestration.get("initialDifficulty", "medium"),
+            "difficulty": session_init.get("initialDifficulty", "medium"),
             "aiReasoning": first_q.get("aiReasoning", ""),
             "expectedConcepts": first_q.get("expectedConcepts", []),
             "isFollowUp": False,
@@ -383,7 +400,7 @@ async def proceed_to_next_round_handler(data: dict, user: dict) -> dict:
             "roundStatus": "IN_PROGRESS",
             "status": "IN_PROGRESS",
             "currentQuestionIndex": 0,
-            "difficultyLevel": orchestration.get("initialDifficulty", "medium"),
+            "difficultyLevel": session_init.get("initialDifficulty", "medium"),
             "currentStage": first_q.get("stage", "TECHNICAL"),
             "currentQuestionText": first_q["questionText"],
             "questions": questions,
@@ -421,7 +438,7 @@ async def proceed_to_next_round_handler(data: dict, user: dict) -> dict:
             detail={"success": False, "message": str(e)}
         )
 
-# 6. Submit Candidate Answer — Core Orchestrated Closed-Loop Turn
+# 6. Submit Candidate Answer — Core Closed-Loop Turn Execution
 async def submit_answer_handler(
     interview_id: str,
     text: Optional[str],
@@ -477,8 +494,8 @@ async def submit_answer_handler(
             "updatedAt": datetime.utcnow()
         })
 
-        # Run Supervisor Closed-Loop Orchestration Turn
-        turn_result = await process_orchestrated_answer_turn(
+        # Run Turn Execution in Interview Service
+        turn_result = await execute_interview_turn(
             interview=interview,
             user_id=user_id,
             answer_text=answer_text,
@@ -521,10 +538,10 @@ async def submit_answer_handler(
             round_status_val = "ROUND_COMPLETED"
             round_evals = [e for e in evaluations if e.get("round") == active_round]
 
-            round_recommendation = await generate_round_recommendation(
+            round_recommendation = await generate_round_summary_recommendation(
                 candidate_name=interview.get("candidateName", "Candidate"),
                 target_role=interview.get("targetRole", "Software Development Engineer (SDE)"),
-                round=active_round,
+                round_name=active_round,
                 evaluations=round_evals,
                 conversation_history=conv_history
             )
@@ -535,7 +552,7 @@ async def submit_answer_handler(
             else:
                 round_recommendations.append(round_recommendation)
 
-            # Check if all rounds completed or Round 3 finished
+            # Check if final round completed
             if active_round == "ROUND_3_HR":
                 status_val = "COMPLETED"
                 round_status_val = "ALL_COMPLETED"
@@ -548,7 +565,7 @@ async def submit_answer_handler(
                         start_time = datetime.utcnow()
                 duration_seconds = max(0, round((end_time - start_time.replace(tzinfo=None)).total_seconds()))
 
-                final_decision = await generate_recruiter_decision(
+                final_decision = await generate_recruiter_hiring_decision(
                     candidate_name=interview.get("candidateName", "Candidate"),
                     skills=interview.get("skills", []),
                     target_role=interview.get("targetRole", "Software Development Engineer (SDE)"),
@@ -793,7 +810,7 @@ async def end_interview_handler(data: dict, user: dict) -> dict:
                 start_time = datetime.utcnow()
         duration_seconds = max(0, round((end_time - start_time.replace(tzinfo=None)).total_seconds()))
 
-        decision = await generate_recruiter_decision(
+        decision = await generate_recruiter_hiring_decision(
             candidate_name=interview.get("candidateName", "Candidate"),
             skills=interview.get("skills", []),
             target_role=interview.get("targetRole", "Software Development Engineer (SDE)"),
@@ -803,9 +820,9 @@ async def end_interview_handler(data: dict, user: dict) -> dict:
         )
         decision["decidedAt"] = datetime.utcnow()
 
-        # Run Career Coach
+        # Run Career Guidance & Learning Roadmap
         weaknesses = await get_candidate_weaknesses(user_id, 10)
-        coaching_result = await generate_learning_roadmap(
+        coaching_result = await generate_candidate_learning_roadmap(
             candidate_id=user_id,
             interview_id=interview.get("interviewId", ""),
             target_role=interview.get("targetRole", "Software Development Engineer (SDE)"),
@@ -833,7 +850,7 @@ async def end_interview_handler(data: dict, user: dict) -> dict:
 
         return {
             "success": True,
-            "message": "Interview ended successfully with Career Intelligence analysis 🎉",
+            "message": "Interview ended successfully 🎉",
             "interview": serialize_doc(updated),
             "decision": decision,
             "learningPlan": coaching_result.get("learningPlan")

@@ -242,3 +242,9 @@ Return ONLY valid JSON:
         "learningPlan": plan_doc or learning_plan_data,
         **learning_plan_data
     }
+
+generate_career_roadmap = generate_learning_roadmap
+generate_candidate_learning_roadmap = generate_learning_roadmap
+
+__all__ = ["generate_learning_roadmap", "generate_career_roadmap", "generate_candidate_learning_roadmap"]
+

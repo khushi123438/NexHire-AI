@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from app.config.db import connect_db, close_db
 from app.rag.ingestion.ingestion_service import seed_knowledge_base
-from app.middleware.upload import BACKEND_DIR, RESUME_UPLOAD_DIR, AUDIO_UPLOAD_DIR
+from app.middleware.upload import BACKEND_DIR
 from app.routes.auth_routes import router as auth_router
 from app.routes.resume_routes import router as resume_router
 from app.routes.interview_routes import router as interview_router
@@ -25,19 +25,19 @@ async def lifespan(app: FastAPI):
     try:
         await seed_knowledge_base()
     except Exception as e:
-        print(f"RAG seed initialization warning: {e}")
+        print(f"[RAG Seed Warning]: {e}")
     yield
     # Shutdown
     await close_db()
 
 app = FastAPI(
     title="NexHire AI Platform API",
-    description="Agentic RAG-Based Adaptive Interview Coach Backend (Python/FastAPI)",
-    version="1.0.0",
+    description="Python FastAPI + NLP + RAG + LLMs + Generative AI Interview Coach Backend",
+    version="2.0.0",
     lifespan=lifespan
 )
 
-# CORS Configuration matching Express
+# CORS Configuration
 client_url = os.getenv("CLIENT_URL", "http://localhost:5173")
 allowed_origins = [
     client_url,
@@ -74,15 +74,13 @@ app.include_router(learning_router)
 def root():
     return {
         "success": True,
-        "platform": "NexHire AI — Agentic RAG-Based Adaptive Interview Coach",
+        "platform": "NexHire AI — NLP, RAG & LLM-Powered Adaptive Interview Platform",
         "status": "Operational 🚀",
-        "agents": [
-            "ResumeIntelligenceAgent",
-            "InterviewPlannerAgent",
-            "InterviewerAgent",
-            "QuestionGenerationAgent",
-            "EvaluationAgent",
-            "CareerCoachAgent",
-            "SupervisorAgent",
-        ],
+        "architecture": {
+            "backend": "Python / FastAPI",
+            "nlp": "Resume Parsing, Skill Extraction & Candidate Profiling",
+            "rag": "Embeddings + Vector Retrieval + Grounded Knowledge Base",
+            "llm": "LLM-as-a-Judge Evaluation, Dynamic Question Generation & Recommendations",
+            "database": "MongoDB (Motor Async)"
+        }
     }

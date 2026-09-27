@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/resume", tags=["Resume"])
 @router.post("/upload")
 async def upload_resume(
     resume: UploadFile = File(...),
-    targetRole: Optional[str] = Form(default="Software Development Engineer (SDE)"),
+    targetRole: Optional[str] = Form(default=None),
     user: dict = Depends(protect)
 ):
     return await upload_resume_handler(resume, targetRole, user)

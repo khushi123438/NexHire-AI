@@ -22,6 +22,15 @@ CURATED_KNOWLEDGE = [
     },
     {
         "domain": "Frontend",
+        "topic": "React State Management",
+        "subtopic": "Context API vs Redux vs Zustand & Memoization",
+        "difficulty": "medium",
+        "contentType": "tradeoff",
+        "tags": ["React", "State Management", "Context API", "Redux", "Zustand", "useMemo", "useCallback", "React.memo"],
+        "text": "Context API is ideal for low-velocity global state (theming, auth session), but frequent updates cause all consuming subtrees to re-render. Dedicated state libraries like Redux Toolkit or Zustand provide fine-grained selector subscriptions to eliminate unnecessary re-renders. Memoization tools (useMemo, useCallback, React.memo) carry memory overhead and should only be applied when computed values are expensive or object references must remain stable across renders."
+    },
+    {
+        "domain": "Frontend",
         "topic": "Web Performance",
         "subtopic": "Core Web Vitals & Asset Optimization",
         "difficulty": "medium",
@@ -52,11 +61,20 @@ CURATED_KNOWLEDGE = [
     {
         "domain": "Backend",
         "topic": "REST API Architecture",
-        "subtopic": "Idempotency, Status Codes & Versioning",
+        "subtopic": "Idempotency, Status Codes & Rate Limiting",
         "difficulty": "medium",
         "contentType": "concept",
-        "tags": ["REST APIs", "HTTP", "Idempotency", "API Design", "Rate Limiting", "Pagination"],
-        "text": "RESTful APIs enforce stateless client-server interactions using standard HTTP methods. GET, PUT, DELETE, and HEAD are idempotent, whereas POST is not. Idempotency keys prevent duplicate processing on network retries. Proper pagination (cursor-based vs offset-based) prevents server memory exhaustion on large datasets. API versioning is typically handled via URI paths (/v1/users) or custom request headers."
+        "tags": ["REST APIs", "HTTP", "Idempotency", "API Design", "Rate Limiting", "Pagination", "Token Bucket"],
+        "text": "RESTful APIs enforce stateless client-server interactions using standard HTTP methods. GET, PUT, DELETE, and HEAD are idempotent, whereas POST is non-idempotent. Idempotency keys prevent duplicate transaction processing on network retries. Distributed rate limiting utilizes Token Bucket or Leaky Bucket algorithms via Redis to throttle excessive traffic. Cursor-based pagination scales across large tables without the OFFSET performance penalty."
+    },
+    {
+        "domain": "Backend",
+        "topic": "Database Query Optimization",
+        "subtopic": "WHERE vs HAVING, Indexing & EXPLAIN Plans",
+        "difficulty": "medium",
+        "contentType": "concept",
+        "tags": ["SQL", "Databases", "WHERE", "HAVING", "Indexing", "B-Tree", "EXPLAIN", "Query Optimization"],
+        "text": "WHERE filters individual rows before aggregation, utilizing B-Tree indexes for fast scans. HAVING filters aggregate groups after GROUP BY execution and cannot use standard row indexes. Optimizing complex queries involves creating composite covering indexes, analyzing EXPLAIN execution plans for sequential scans, eliminating SELECT * wildcards, and structuring JOIN conditions on indexed primary/foreign keys."
     },
     {
         "domain": "Backend",
@@ -73,8 +91,8 @@ CURATED_KNOWLEDGE = [
         "subtopic": "Redis Strategies & Event-Driven Decoupling",
         "difficulty": "advanced",
         "contentType": "tradeoff",
-        "tags": ["Redis", "Caching", "Cache Stampede", "Kafka", "RabbitMQ", "Message Queues"],
-        "text": "Distributed caching with Redis employs Cache-Aside, Write-Through, or Write-Back strategies with TTL expiration and LRU/LFU eviction policies. Mitigate cache stampedes (thundering herd) using probabilistic early expiration or distributed mutex locks. Message brokers (Kafka, RabbitMQ) decouple high-latency background operations from synchronous API request-response lifecycles."
+        "tags": ["Redis", "Caching", "Cache Stampede", "Cache Penetration", "Kafka", "RabbitMQ", "Message Queues"],
+        "text": "Distributed caching with Redis employs Cache-Aside, Write-Through, or Write-Back strategies with TTL expiration and LRU/LFU eviction policies. Mitigate cache stampedes (thundering herd) using probabilistic early expiration or distributed mutex locks. Use Bloom filters to prevent cache penetration from non-existent keys. Message brokers (Kafka, RabbitMQ) decouple high-latency background operations from synchronous API request-response lifecycles."
     },
     {
         "domain": "Backend",
@@ -82,11 +100,20 @@ CURATED_KNOWLEDGE = [
         "subtopic": "JWT Lifecycles, OAuth2 & OWASP Top 10",
         "difficulty": "advanced",
         "contentType": "scenario",
-        "tags": ["Security", "JWT", "OAuth2", "OWASP", "XSS", "CSRF", "SQL Injection"],
+        "tags": ["Security", "JWT", "OAuth2", "OWASP", "XSS", "CSRF", "SQL Injection", "Authentication"],
         "text": "Stateless JWT authentication pairs short-lived access tokens (stored in memory or secure HTTP-only SameSite cookies) with revocable refresh tokens stored in database/Redis. OWASP defense includes parameterized queries against SQL injection, CSP headers and sanitization against XSS, and anti-CSRF tokens for state-changing browser requests."
     },
 
     # ================= 3. Data Science & AI Engineering =================
+    {
+        "domain": "Data Science & AI",
+        "topic": "Python Core & Data Science",
+        "subtopic": "Memory Management, GIL & Vectorization",
+        "difficulty": "medium",
+        "contentType": "deepdive",
+        "tags": ["Python", "GIL", "Memory Management", "NumPy", "Pandas", "Vectorization", "Generators"],
+        "text": "CPython manages memory using reference counting alongside a cyclic garbage collector with generational thresholds (Gen 0, 1, 2). The Global Interpreter Lock (GIL) limits execution to one native thread at a time for bytecode, making multiprocessing necessary for CPU-bound tasks. NumPy and Pandas bypass GIL bottlenecks by executing vector calculations in compiled C/Fortran continuous memory arrays."
+    },
     {
         "domain": "Data Science & AI",
         "topic": "Machine Learning Fundamentals",
@@ -111,7 +138,7 @@ CURATED_KNOWLEDGE = [
         "subtopic": "Self-Attention Mechanism & Embeddings",
         "difficulty": "advanced",
         "contentType": "deepdive",
-        "tags": ["Deep Learning", "Transformers", "Self-Attention", "Embeddings", "LLMs", "NLP"],
+        "tags": ["Deep Learning", "Transformers", "Self-Attention", "Embeddings", "LLMs", "NLP", "Generative AI"],
         "text": "The Transformer architecture relies on Multi-Head Self-Attention calculating scaled dot-product attention: Attention(Q, K, V) = softmax(Q K^T / sqrt(d_k)) V. This enables parallel token processing across entire sequences, resolving RNN bottleneck issues with long-range dependencies. Dense vector embeddings map semantic concepts into continuous vector spaces where cosine similarity measures conceptual closeness."
     },
     {
@@ -137,11 +164,11 @@ CURATED_KNOWLEDGE = [
     {
         "domain": "DevOps & Cloud",
         "topic": "Kubernetes Architecture",
-        "subtopic": "Pod Scheduling, Services & Ingress Controllers",
+        "subtopic": "Pod Scheduling, Deployments, Probes & Ingress",
         "difficulty": "advanced",
         "contentType": "deepdive",
-        "tags": ["Kubernetes", "K8s", "Pods", "Deployments", "Services", "Ingress", "HorizontalPodAutoscaler"],
-        "text": "Kubernetes control plane (API server, etcd, scheduler, controller manager) coordinates worker nodes running kubelet and kube-proxy. Deployments manage replica sets enabling zero-downtime rolling updates. ClusterIP provides internal service discovery, NodePort exposes static ports on all nodes, and Ingress controllers route external HTTP/HTTPS traffic with SSL termination and path-based routing. HPA autoscales pods based on CPU/memory metrics."
+        "tags": ["Kubernetes", "K8s", "Pods", "Deployments", "Services", "Ingress", "HorizontalPodAutoscaler", "Probes"],
+        "text": "Kubernetes control plane (API server, etcd, scheduler, controller manager) coordinates worker nodes running kubelet and kube-proxy. Deployments manage replica sets enabling zero-downtime rolling updates. Liveness probes restart unhealthy containers while Readiness probes ensure traffic only routes to pods ready to serve. ClusterIP provides internal discovery, NodePort exposes static ports, and Ingress routes external traffic with TLS termination."
     },
     {
         "domain": "DevOps & Cloud",
@@ -149,8 +176,17 @@ CURATED_KNOWLEDGE = [
         "subtopic": "Pipeline Automation & Terraform State Management",
         "difficulty": "advanced",
         "contentType": "tradeoff",
-        "tags": ["CI/CD", "GitHub Actions", "Jenkins", "Terraform", "IaC", "Blue-Green Deployment"],
+        "tags": ["CI/CD", "GitHub Actions", "Jenkins", "Terraform", "IaC", "Blue-Green Deployment", "Canary"],
         "text": "CI/CD pipelines automate testing, linting, security vulnerability scanning, container builds, and deployments. Deployment strategies include Rolling Updates, Blue-Green (switching traffic to identical standby environment), and Canary deployments (routing fractional traffic to validate stability). Terraform manages Infrastructure as Code (IaC) with declarative HCL, remote backend state locking (S3 + DynamoDB), and drift detection."
+    },
+    {
+        "domain": "DevOps & Cloud",
+        "topic": "Cloud Architecture & AWS",
+        "subtopic": "VPC, IAM Least Privilege, EC2 & S3",
+        "difficulty": "medium",
+        "contentType": "concept",
+        "tags": ["AWS", "Cloud", "VPC", "IAM", "EC2", "S3", "Security Groups", "Auto Scaling"],
+        "text": "Cloud architectures isolate resources in Virtual Private Clouds (VPC) with public/private subnets and NAT gateways. Security Groups act as stateful firewalls while Network ACLs are stateless. AWS IAM enforces the principle of least privilege using role-based policies and temporary STS credentials. Auto Scaling Groups dynamically scale EC2 instances behind Application Load Balancers based on target tracking metrics."
     },
     {
         "domain": "DevOps & Cloud",
@@ -177,11 +213,11 @@ CURATED_KNOWLEDGE = [
     {
         "domain": "SDE Core",
         "topic": "Data Structures & Algorithms",
-        "subtopic": "Space-Time Complexities & Graph Traversals",
+        "subtopic": "Space-Time Complexities, Hash Tables & Graph Traversals",
         "difficulty": "advanced",
         "contentType": "concept",
-        "tags": ["DSA", "Complexity", "Big-O", "Graphs", "BFS", "DFS", "Trees", "Dynamic Programming"],
-        "text": "Algorithmic complexity evaluates worst, average, and amortized space and time bounds. Hash tables provide O(1) average lookup but can degrade to O(n) under collisions without balanced bucket treeification. Breadth-First Search (BFS) finds shortest paths in unweighted graphs using queues, while Depth-First Search (DFS) powers topological sorting and cycle detection. Dynamic programming eliminates redundant overlapping subproblem computations."
+        "tags": ["DSA", "Complexity", "Big-O", "Graphs", "BFS", "DFS", "Trees", "Hash Tables", "Dynamic Programming"],
+        "text": "Algorithmic complexity evaluates worst, average, and amortized space and time bounds. Hash tables provide O(1) average lookup but can degrade to O(n) under collisions without balanced bucket treeification (Red-Black Trees). Breadth-First Search (BFS) finds shortest paths in unweighted graphs using queues, while Depth-First Search (DFS) powers topological sorting and cycle detection. Dynamic programming eliminates redundant overlapping subproblem computations."
     },
     {
         "domain": "SDE Core",

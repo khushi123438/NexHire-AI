@@ -48,13 +48,13 @@ export default function EvaluationPanel({ latestEvaluation = null, evaluations =
     );
   }
 
-  // 5-Factor Rubric metrics
-  const correctness = evalData.correctness ?? evalData.technicalAccuracy ?? 8.0;
-  const technicalDepth = evalData.technicalDepth ?? evalData.examplesUsed ?? 7.5;
-  const relevance = evalData.relevance ?? evalData.confidence ?? 8.0;
-  const clarity = evalData.clarity ?? evalData.communication ?? 8.0;
-  const completeness = evalData.completeness ?? 7.5;
-  const overall = evalData.overall ?? Number(((correctness + technicalDepth + relevance + clarity + completeness) / 5).toFixed(1));
+  // 5-Factor Rubric metrics derived strictly from actual evaluation turn record
+  const correctness = typeof evalData.correctness === "number" ? evalData.correctness : (typeof evalData.technicalAccuracy === "number" ? evalData.technicalAccuracy : null);
+  const technicalDepth = typeof evalData.technicalDepth === "number" ? evalData.technicalDepth : (typeof evalData.examplesUsed === "number" ? evalData.examplesUsed : null);
+  const relevance = typeof evalData.relevance === "number" ? evalData.relevance : (typeof evalData.confidence === "number" ? evalData.confidence : null);
+  const clarity = typeof evalData.clarity === "number" ? evalData.clarity : (typeof evalData.communication === "number" ? evalData.communication : null);
+  const completeness = typeof evalData.completeness === "number" ? evalData.completeness : null;
+  const overall = typeof evalData.overall === "number" ? evalData.overall : null;
 
   const rubricMetrics = [
     { label: "Correctness (30%)", score: correctness, weight: "30%" },
@@ -78,26 +78,29 @@ export default function EvaluationPanel({ latestEvaluation = null, evaluations =
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-white">Evaluation</h2>
-
-
               </div>
               <p className="text-sm text-gray-400">Structured evaluation & concept analysis</p>
             </div>
           </div>
 
           <div className="text-right">
-            <p className="text-2xl font-black text-yellow-400 font-mono">{overall}/10</p>
-            <p className="text-xs text-green-400 font-semibold flex items-center gap-1 justify-end">
-              <Sparkles size={12} />
-              {overall >= 8.0 ? "Strong Response" : overall >= 6.5 ? "Good Foundation" : "Needs Polish"}
+            <p className="text-2xl font-black text-yellow-400 font-mono">
+              {overall !== null ? `${overall}/10` : "--/10"}
             </p>
+            {overall !== null && (
+              <p className="text-xs text-green-400 font-semibold flex items-center gap-1 justify-end">
+                <Sparkles size={12} />
+                {overall >= 8.0 ? "Strong Response" : overall >= 6.5 ? "Good Foundation" : "Needs Polish"}
+              </p>
+            )}
           </div>
         </div>
 
         {/* 5-Factor Rubric Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
           {rubricMetrics.map((item, index) => {
-            const percent = Math.min(100, Math.round((item.score / 10) * 100));
+            const hasScore = item.score !== null && item.score !== undefined;
+            const percent = hasScore ? Math.min(100, Math.round((item.score / 10) * 100)) : 0;
             return (
               <div
                 key={index}
@@ -105,7 +108,9 @@ export default function EvaluationPanel({ latestEvaluation = null, evaluations =
               >
                 <div className="flex items-center justify-between mb-1 text-xs">
                   <span className="text-gray-300 font-medium">{item.label}</span>
-                  <span className="text-yellow-400 font-mono font-bold">{item.score}/10</span>
+                  <span className="text-yellow-400 font-mono font-bold">
+                    {hasScore ? `${item.score}/10` : "--"}
+                  </span>
                 </div>
                 <div className="w-full bg-white/[0.05] rounded-full h-1.5 overflow-hidden">
                   <div
@@ -140,46 +145,54 @@ export default function EvaluationPanel({ latestEvaluation = null, evaluations =
         )}
 
         {/* Strengths & Improvement Boxes */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <div className="p-3 rounded-2xl bg-[#0A0A0A] border border-green-500/20">
-            <div className="flex items-center gap-1.5 mb-1 text-green-400 font-bold text-xs">
-              <TrendingUp size={14} />
-              <span>Strengths</span>
-            </div>
-            <p className="text-gray-300 text-xs leading-relaxed">
-              {evalData.strengths || "Clear understanding of fundamental principles."}
-            </p>
-          </div>
+        {(evalData.strengths || evalData.areasToImprove) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            {evalData.strengths && (
+              <div className="p-3 rounded-2xl bg-[#0A0A0A] border border-green-500/20">
+                <div className="flex items-center gap-1.5 mb-1 text-green-400 font-bold text-xs">
+                  <TrendingUp size={14} />
+                  <span>Strengths</span>
+                </div>
+                <p className="text-gray-300 text-xs leading-relaxed">
+                  {evalData.strengths}
+                </p>
+              </div>
+            )}
 
-          <div className="p-3 rounded-2xl bg-[#0A0A0A] border border-orange-500/20">
-            <div className="flex items-center gap-1.5 mb-1 text-orange-400 font-bold text-xs">
-              <AlertCircle size={14} />
-              <span>Areas to Polish</span>
-            </div>
-            <p className="text-gray-300 text-xs leading-relaxed">
-              {evalData.areasToImprove || "Elaborate with concrete architectural examples."}
-            </p>
-          </div>
-        </div>
-
-        {/* Recruiter Summary Feedback */}
-        <div className="p-3 rounded-2xl bg-white/[0.02] border border-yellow-500/10">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="font-bold text-xs text-yellow-400">Recruiter Feedback</h3>
-            {evalData.difficultyAdjusted && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-gray-300 border border-white/10 font-mono">
-                {evalData.difficultyAdjusted === "increase"
-                  ? "📈 Difficulty Scaled Up"
-                  : evalData.difficultyAdjusted === "remediate"
-                    ? "🔄 Reassessing Concept"
-                    : "⚖️ Difficulty Maintained"}
-              </span>
+            {evalData.areasToImprove && (
+              <div className="p-3 rounded-2xl bg-[#0A0A0A] border border-orange-500/20">
+                <div className="flex items-center gap-1.5 mb-1 text-orange-400 font-bold text-xs">
+                  <AlertCircle size={14} />
+                  <span>Areas to Polish</span>
+                </div>
+                <p className="text-gray-300 text-xs leading-relaxed">
+                  {evalData.areasToImprove}
+                </p>
+              </div>
             )}
           </div>
-          <p className="text-gray-300 text-xs leading-relaxed font-sans">
-            {evalData.feedback || "Solid foundation demonstrated with articulate communication."}
-          </p>
-        </div>
+        )}
+
+        {/* Recruiter Summary Feedback */}
+        {evalData.feedback && (
+          <div className="p-3 rounded-2xl bg-white/[0.02] border border-yellow-500/10">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-bold text-xs text-yellow-400">Recruiter Feedback</h3>
+              {evalData.difficultyAdjusted && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-gray-300 border border-white/10 font-mono">
+                  {evalData.difficultyAdjusted === "increase"
+                    ? "📈 Difficulty Scaled Up"
+                    : evalData.difficultyAdjusted === "remediate"
+                      ? "🔄 Reassessing Concept"
+                      : "⚖️ Difficulty Maintained"}
+                </span>
+              )}
+            </div>
+            <p className="text-gray-300 text-xs leading-relaxed font-sans">
+              {evalData.feedback}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

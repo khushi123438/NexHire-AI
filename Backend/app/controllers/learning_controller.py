@@ -3,7 +3,7 @@ from fastapi import HTTPException, status
 from app.config.db import get_db
 from app.utils.helpers import to_object_id, serialize_doc
 from app.services.memory_service import get_candidate_weaknesses, get_candidate_strengths
-from app.agents.career_coach.career_coach_agent import generate_learning_roadmap
+from app.services.genai_service import generate_candidate_learning_roadmap
 
 async def get_candidate_weaknesses_handler(user: dict) -> dict:
     try:
@@ -30,7 +30,7 @@ async def generate_learning_plan_handler(data: dict, user: dict) -> dict:
         interview_id = data.get("interviewId", "")
 
         weaknesses = await get_candidate_weaknesses(candidate_id, 10)
-        result = await generate_learning_roadmap(
+        result = await generate_candidate_learning_roadmap(
             candidate_id=candidate_id,
             interview_id=interview_id,
             target_role=target_role,
