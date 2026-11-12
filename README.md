@@ -1,4 +1,4 @@
-# NexHire-AI
+# NexHire-AI : AI-Powered Interview Coach
 
 **NexHire-AI** is an AI-powered interview preparation and career intelligence platform that analyzes a candidate's resume, recommends suitable roles, conducts adaptive interviews, evaluates answers, and generates personalized career guidance.
 
